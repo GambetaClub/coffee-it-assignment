@@ -3,6 +3,7 @@ import {
   ConflictException,
   InternalServerErrorException,
   Logger,
+  Inject,
 } from '@nestjs/common';
 import { CreateCityDto } from './dto/create-city.dto';
 import { PrismaService } from '../database/prisma.service';
@@ -11,32 +12,57 @@ import { CityWithWeatherDto } from './dto/city-with-weather.dto';
 import { CityDto } from './dto/city.dto';
 import { CronExpression } from '@nestjs/schedule';
 import { Cron } from '@nestjs/schedule';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 
 @Injectable()
 export class CitiesService {
-
   private readonly logger = new Logger(CitiesService.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly weatherService: WeatherService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
   async findAll(): Promise<CityDto[]> {
-    const citiesWithWeather = await this.prisma.city.findMany() as CityDto[];
+    const cachedCitiesWithWeather = await this.cacheManager.get<CityDto[]>(
+      'all_cities',
+    );
+
+    if (cachedCitiesWithWeather) {
+      return cachedCitiesWithWeather;
+    }
+
+    const citiesWithWeather = (await this.prisma.city.findMany()) as CityDto[];
+
+    await this.cacheManager.set('all_cities', citiesWithWeather);
 
     return citiesWithWeather;
   }
 
   async findAllWithWeather(): Promise<CityWithWeatherDto[]> {
-    const citiesWithWeather = await this.prisma.city.findMany({
+    const cachedCitiesWithWeather = await this.cacheManager.get<
+      CityWithWeatherDto[]
+    >('all_cities_with_weather');
+
+    if (cachedCitiesWithWeather) {
+      return cachedCitiesWithWeather;
+    }
+
+    const citiesWithWeather = (await this.prisma.city.findMany({
       include: {
         weather: {
           orderBy: { dataTime: 'desc' },
           take: 1,
         },
       },
-    }) as CityWithWeatherDto[];
+    })) as CityWithWeatherDto[];
+
+    await this.cacheManager.set(
+      'all_cities_with_weather',
+      citiesWithWeather,
+    );
 
     return citiesWithWeather;
   }
@@ -45,10 +71,20 @@ export class CitiesService {
     return this.prisma.city.findUnique({ where: { name } });
   }
 
-  async findByNameAndWeather7Days(name: string) {
-    const cityWith7Weather = await this.prisma.city.findUnique({
+  async findByNameAndWeather7Days(name: string): Promise<CityWithWeatherDto> {
+    const cachedCityWith7Weather =
+      await this.cacheManager.get<CityWithWeatherDto>(
+        `city_with_7_weather_${name}`,
+      );
+
+    if (cachedCityWith7Weather) {
+      console.log(`Cache hit for city_with_7_weather_${name}`);
+      return cachedCityWith7Weather;
+    }
+
+    const cityWith7Weather = (await this.prisma.city.findUnique({
       where: { name },
-      include: { 
+      include: {
         weather: {
           where: {
             dataTime: {
@@ -57,7 +93,12 @@ export class CitiesService {
           },
         },
       },
-    }) as CityWithWeatherDto;
+    })) as CityWithWeatherDto;
+
+    await this.cacheManager.set(
+      `city_with_7_weather_${name}`,
+      cityWith7Weather,
+    );
 
     return cityWith7Weather;
   }
@@ -109,8 +150,9 @@ export class CitiesService {
         },
       });
 
+      await this.cacheManager.del(`all_cities_with_weather`);
+
       return newCity;
-      
     } catch (error) {
       console.error(`Unexpected error creating city ${input.name}:`, error);
       throw new InternalServerErrorException(
@@ -120,11 +162,16 @@ export class CitiesService {
   }
 
   async delete(id: number) {
-    return this.prisma.city.delete({ where: { id } });
+    const cityToDelete = await this.prisma.city.findUnique({ where: { id } });
+
+    if (cityToDelete) {
+      await this.prisma.city.delete({ where: { id } });
+      await this.cacheManager.del('all_cities_with_weather');
+      await this.cacheManager.del(`city_with_7_weather_${cityToDelete.name}`);
+    }
   }
 
-
-  @Cron(CronExpression.EVERY_10_SECONDS)
+  @Cron(CronExpression.EVERY_HOUR)
   async saveCurrentWeatherForAllCities() {
     this.logger.log('Cron job: Fetching latest weather data for all cities');
 
@@ -132,6 +179,11 @@ export class CitiesService {
 
     for (const city of cities) {
       await this.weatherService.fetchAndSaveCurrentWeatherForCity(city);
+      await this.cacheManager.del(`city_with_7_weather_${city.name}`);
     }
+
+    await this.cacheManager.del('all_cities_with_weather');
+
+    await this.findAllWithWeather(); // Warming up the cache
   }
 }

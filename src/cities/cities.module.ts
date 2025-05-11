@@ -5,8 +5,22 @@ import { HttpModule } from '@nestjs/axios';
 import { PrismaModule } from 'src/database/prisma.module';
 import { ConfigModule } from '@nestjs/config';
 import { WeatherModule } from 'src/weather/weather.module';
+import { CacheModule } from '@nestjs/cache-manager';
+import * as redisStore from 'cache-manager-redis-store';
+
+const ttl = 60 * 60 * 1000; // 1 hour
+
 @Module({
-  imports: [HttpModule, PrismaModule, ConfigModule, WeatherModule],
+  imports: [HttpModule, PrismaModule, ConfigModule, WeatherModule, 
+    CacheModule.register({
+      store: redisStore,
+      socket: {
+        host: 'localhost',
+        port: 6379,
+      },
+      ttl: ttl,
+    }),
+  ],
   controllers: [CitiesController],
   providers: [CitiesService]
 })

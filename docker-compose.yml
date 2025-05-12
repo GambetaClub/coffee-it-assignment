@@ -1,22 +1,22 @@
-version: '3.8'
-
 services:
   app:
     build:
       context: .
-      dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "3000:3000" # Map host port 3000 to container port 3000
     environment:
-      DATABASE_URL: postgresql://neondb_owner:npg_Oq5cviEYFR1L@ep-red-smoke-a2wr7isg-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require # Replace with your actual Neon database URL
-      NODE_ENV: development # Or production, as needed
-    command: pnpm run start:dev # Added for hot-reloading in development
-    restart: unless-stopped
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+    command: pnpm run start:dev
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379" #
     volumes:
-      - .:/usr/src/app # Mounts the current directory to the container for development
-      - /usr/src/app/node_modules # Excludes node_modules from being overwritten by the host mount
-      - /usr/src/app/dist # Excludes dist from being overwritten by the host mount
+      - redis-data:/data
 
-# db service removed as per user request
-
-# volumes section removed as postgres_data is no longer needed 
+volumes:
+  redis-data:

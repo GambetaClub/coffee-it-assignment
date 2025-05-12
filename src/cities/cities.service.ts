@@ -14,6 +14,7 @@ import { CronExpression } from '@nestjs/schedule';
 import { Cron } from '@nestjs/schedule';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
+import { MetricsService } from '../metrics/metrics.service';
 
 @Injectable()
 export class CitiesService {
@@ -23,33 +24,44 @@ export class CitiesService {
     private readonly prisma: PrismaService,
     private readonly weatherService: WeatherService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly metricsService: MetricsService,
   ) {}
 
   async findAll(): Promise<CityDto[]> {
-    const cachedCitiesWithWeather = await this.cacheManager.get<CityDto[]>(
-      'all_cities',
+    const cacheKey = 'all_cities';
+    const cachedCities = await this.cacheManager.get<CityDto[]>(
+      cacheKey,
     );
 
-    if (cachedCitiesWithWeather) {
-      return cachedCitiesWithWeather;
+    if (cachedCities) {
+      this.metricsService.cacheInteractions.inc({ cache_name: cacheKey, status: 'hit' });
+      this.logger.debug(`Cache HIT for key: ${cacheKey}`);
+      return cachedCities;
     }
 
+    this.metricsService.cacheInteractions.inc({ cache_name: cacheKey, status: 'miss' });
+    this.logger.debug(`Cache MISS for key: ${cacheKey}`);
     const citiesWithWeather = (await this.prisma.city.findMany()) as CityDto[];
 
-    await this.cacheManager.set('all_cities', citiesWithWeather);
+    await this.cacheManager.set(cacheKey, citiesWithWeather);
 
     return citiesWithWeather;
   }
 
   async findAllWithWeather(): Promise<CityWithWeatherDto[]> {
-    const cachedCitiesWithWeather = await this.cacheManager.get<
+    const cacheKey = 'all_cities_with_weather';
+    const cachedData = await this.cacheManager.get<
       CityWithWeatherDto[]
-    >('all_cities_with_weather');
+    >(cacheKey);
 
-    if (cachedCitiesWithWeather) {
-      return cachedCitiesWithWeather;
+    if (cachedData) {
+      this.metricsService.cacheInteractions.inc({ cache_name: cacheKey, status: 'hit' });
+      this.logger.debug(`Cache HIT for key: ${cacheKey}`);
+      return cachedData;
     }
 
+    this.metricsService.cacheInteractions.inc({ cache_name: cacheKey, status: 'miss' });
+    this.logger.debug(`Cache MISS for key: ${cacheKey}`);
     const citiesWithWeather = (await this.prisma.city.findMany({
       include: {
         weather: {
@@ -60,7 +72,7 @@ export class CitiesService {
     })) as CityWithWeatherDto[];
 
     await this.cacheManager.set(
-      'all_cities_with_weather',
+      cacheKey,
       citiesWithWeather,
     );
 
@@ -72,16 +84,20 @@ export class CitiesService {
   }
 
   async findByNameAndWeather7Days(name: string): Promise<CityWithWeatherDto> {
-    const cachedCityWith7Weather =
+    const cacheKey = `city_with_7_weather_${name}`;
+    const cachedData =
       await this.cacheManager.get<CityWithWeatherDto>(
-        `city_with_7_weather_${name}`,
+        cacheKey,
       );
 
-    if (cachedCityWith7Weather) {
-      console.log(`Cache hit for city_with_7_weather_${name}`);
-      return cachedCityWith7Weather;
+    if (cachedData) {
+      this.metricsService.cacheInteractions.inc({ cache_name: 'city_with_7_weather_by_name', status: 'hit' });
+      this.logger.debug(`Cache HIT for key: ${cacheKey}`);
+      return cachedData;
     }
 
+    this.metricsService.cacheInteractions.inc({ cache_name: 'city_with_7_weather_by_name', status: 'miss' });
+    this.logger.debug(`Cache MISS for key: ${cacheKey}`);
     const cityWith7Weather = (await this.prisma.city.findUnique({
       where: { name },
       include: {
@@ -96,7 +112,7 @@ export class CitiesService {
     })) as CityWithWeatherDto;
 
     await this.cacheManager.set(
-      `city_with_7_weather_${name}`,
+      cacheKey,
       cityWith7Weather,
     );
 
@@ -116,7 +132,7 @@ export class CitiesService {
       );
 
       if (!remoteData?.city || !remoteData?.weather) {
-        console.error(
+        this.logger.error(
           `Failed to fetch weather/geo data for city: ${input.name} from remote API.`,
         );
         throw new InternalServerErrorException(
@@ -151,10 +167,15 @@ export class CitiesService {
       });
 
       await this.cacheManager.del(`all_cities_with_weather`);
+      this.logger.log('Cache invalidated for all_cities_with_weather due to new city creation.');
 
-      return newCity;
+      return newCity as CityWithWeatherDto;
+
     } catch (error) {
-      console.error(`Unexpected error creating city ${input.name}:`, error);
+      this.logger.error(`Unexpected error creating city ${input.name}:`, error.stack);
+      if (error instanceof ConflictException || error instanceof InternalServerErrorException) {
+        throw error;
+      }
       throw new InternalServerErrorException(
         'An unexpected error occurred while creating the city.',
       );
@@ -167,7 +188,9 @@ export class CitiesService {
     if (cityToDelete) {
       await this.prisma.city.delete({ where: { id } });
       await this.cacheManager.del('all_cities_with_weather');
+      this.logger.log('Cache invalidated for all_cities_with_weather due to city deletion.');
       await this.cacheManager.del(`city_with_7_weather_${cityToDelete.name}`);
+      this.logger.log(`Cache invalidated for city_with_7_weather_${cityToDelete.name} due to city deletion.`);
     }
   }
 
@@ -178,12 +201,19 @@ export class CitiesService {
     const cities = await this.findAll();
 
     for (const city of cities) {
-      await this.weatherService.fetchAndSaveCurrentWeatherForCity(city);
-      await this.cacheManager.del(`city_with_7_weather_${city.name}`);
+      try {
+        await this.weatherService.fetchAndSaveCurrentWeatherForCity(city);
+        await this.cacheManager.del(`city_with_7_weather_${city.name}`);
+        this.logger.log(`Cache invalidated for city_with_7_weather_${city.name} due to cron update.`);
+      } catch (error) {
+        this.logger.error(`Error processing city ${city.name} in cron:`, error.stack);
+      }
     }
 
     await this.cacheManager.del('all_cities_with_weather');
+    this.logger.log('Cache invalidated for all_cities_with_weather due to cron update.');
 
-    await this.findAllWithWeather(); // Warming up the cache
+    await this.findAllWithWeather();
+    this.logger.log('Cache warmed up for all_cities_with_weather after cron job.');
   }
 }

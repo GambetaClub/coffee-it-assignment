@@ -1,21 +1,15 @@
-import { City } from '@prisma/client';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CityDto {
+  @ApiProperty({ example: 1, description: 'Unique identifier for the city' })
   id: number;
-  name: string;
-  latitude?: number | null;
-  longitude?: number | null;
-  countryCode?: string | null;
-  stateCode?: string | null;
 
-  static fromEntity(entity: City & { countryCode?: string | null; stateCode?: string | null }): CityDto {
-    const dto = new CityDto();
-    dto.id = entity.id;
-    dto.name = entity.name;
-    dto.latitude = entity.latitude;
-    dto.longitude = entity.longitude;
-    dto.countryCode = entity.countryCode ?? (entity as any).country ?? null;
-    dto.stateCode = entity.stateCode ?? null;
-    return dto;
-  }
-} 
+  @ApiProperty({ example: 'London', description: 'Name of the city' })
+  name: string;
+
+  @ApiPropertyOptional({
+    example: 'GB',
+    description: 'ISO 3166 country code (e.g., GB, US)',
+  })
+  countryCode?: string;
+}

@@ -6,6 +6,7 @@ import { WeatherModule } from './weather/weather.module';
 import { PrismaModule } from './database/prisma.module';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { MetricsModule } from './metrics/metrics.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     PrismaModule,
     CitiesModule,
     WeatherModule,
+    MetricsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

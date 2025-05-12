@@ -3,7 +3,7 @@ import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateCityDto {
   @ApiProperty({
-    example: 'London',
+    example: 'Buenos Aires',
     description: 'Name of the city',
     maxLength: 255,
   })
@@ -13,10 +13,9 @@ export class CreateCityDto {
   name: string;
 
   @ApiPropertyOptional({
-    example: 'GB',
-    
+    example: 'AR',
     description: 'ISO 3166 country code (e.g., GB, US)',
-    maxLength: 10, // Adjusted for potential longer codes, though typically 2-3 chars
+    maxLength: 10, 
   })
   @IsOptional()
   @IsString()

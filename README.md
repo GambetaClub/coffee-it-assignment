@@ -1,18 +1,33 @@
 <p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
-<p align="center">
-  <img src="https://cdn.prod.website-files.com/649d8dd0bdb4fa79179fa0a3/65363125329742981f6a8bf6_clublogo-wit.svg" width="120" alt="Company Logo" />
+  <img src="https://cdn.prod.website-files.com/649d8dd0bdb4fa79179fa0a3/65363125329742981f6a8bf6_clublogo-wit.svg" width="400" alt="Coffee IT" />
 </p>
 
 [circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
 [circleci-url]: https://circleci.com/gh/nestjs/nest
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository for the assignment.
+This project implements a NestJS API to manage a list of cities and retrieve their weather information using the OpenWeatherMap API, as per the Coffee IT assessment requirements. It includes features for storing data in a PostgreSQL database using Prisma, scheduled data fetching, and API documentation with Swagger.
+
+## Core Features
+
+*   **City Management:** CRUD operations for cities.
+*   **Weather Data:** Fetching and storing current and historical weather data from OpenWeatherMap.
+*   **Database:** PostgreSQL integration via Prisma ORM.
+*   **Scheduled Tasks:** Hourly updates of weather data for stored cities using `@nestjs/schedule`.
+*   **API Documentation:** Swagger UI for endpoint documentation (`@nestjs/swagger`).
+*   **Data Transfer Objects:** Usage of Class DTOs with `@ApiProperty` decorators.
+
+## Technology Stack
+
+*   NestJS
+*   TypeScript
+*   Prisma
+*   PostgreSQL
+*   Docker / Docker Compose
+*   @nestjs/swagger
+*   @nestjs/schedule
 
 ## Project setup
 
@@ -41,33 +56,31 @@ To run the application using Docker, ensure you have Docker and Docker Compose i
 docker-compose up
 ```
 
-This will build the Docker image if it doesn't exist and start the application.
+This will build the Docker image (if it doesn't exist), start the NestJS application container, and launch a PostgreSQL instance for the database. The application will be accessible at `http://localhost:3000` (or the port configured in your application/Docker setup).
 
-## Run tests
+## API Endpoints
 
-```bash
-# unit tests
-$ pnpm run test
+The following endpoints are implemented:
 
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
-```
+*   `GET /cities`: Returns a list of all cities (id and name) including their latest stored weather data.
+*   `POST /cities`: Creates a new city, retrieves its current weather, and stores it. Returns `409 Conflict` if the city already exists.
+*   `DELETE /cities/:id`: Deletes the specified city and its associated weather data.
+*   `GET /cities/weather`: Returns an overview of all cities in the database and their last known weather data.
+*   `GET /cities/:name/weather`: Returns the last known weather data for the city specified by name, along with its weather data for the last 7 days (historical data is built up over time). If the city is not found in the database, it attempts to retrieve real-time data from OpenWeatherMap (this data is not persistently stored unless the city is added via `POST /cities`).
 
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+*(The Mau deployment section is specific to NestJS examples and might not be directly applicable unless configured for this project)*
 
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
+## Advanced Features (Optional)
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+To further showcase skills, consider implementing:
+
+*   **Caching:** Redis caching layer for weather data (with hit/miss metrics and invalidation). (Implemented)
+*   **Resilience:** Circuit breaker, retry mechanisms, and fallback strategies for OpenWeatherMap API calls. (Not Implemented)
+*   **Advanced Testing:** End-to-end tests with a real database, load testing, and mocking external APIs. (Not Implemented)
 
 ## Resources
 

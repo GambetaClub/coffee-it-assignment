@@ -188,6 +188,7 @@ export class CitiesService {
     if (cityToDelete) {
       await this.prisma.city.delete({ where: { id } });
       await this.cacheManager.del('all_cities_with_weather');
+      await this.cacheManager.del('all_cities');
       this.logger.log('Cache invalidated for all_cities_with_weather due to city deletion.');
       await this.cacheManager.del(`city_with_7_weather_${cityToDelete.name}`);
       this.logger.log(`Cache invalidated for city_with_7_weather_${cityToDelete.name} due to city deletion.`);
